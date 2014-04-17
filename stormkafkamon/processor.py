@@ -12,7 +12,8 @@ logger = logging.getLogger('kafka.codec').addHandler(NullHandler())
 import struct
 import socket
 from collections import namedtuple
-from kafka.client import KafkaClient, OffsetRequest
+from kafka.client import KafkaClient
+from kafka.common import OffsetRequest
 
 class ProcessorError(Exception):
     def __init__(self, msg):
@@ -53,15 +54,15 @@ def process(spouts):
     for s in spouts:
         for p in s.partitions:
             try:
-                k = KafkaClient(p['broker']['host'], p['broker']['port'])
+                k = KafkaClient('%s:%s' % (p['broker']['host'], p['broker']['port']))
             except socket.gaierror, e:
                 raise ProcessorError('Failed to contact Kafka broker %s (%s)' %
                                      (p['broker']['host'], str(e)))
             earliest_off = OffsetRequest(p['topic'], p['partition'], -2, 1)
             latest_off = OffsetRequest(p['topic'], p['partition'], -1, 1)
 
-            earliest = k.get_offsets(earliest_off)[0]
-            latest = k.get_offsets(latest_off)[0]
+            earliest = k.send_offset_request([earliest_off])[0].offsets[0]
+            latest = k.send_offset_request([latest_off])[0].offsets[0]
             current = p['offset']
 
             brokers.append(p['broker']['host'])
