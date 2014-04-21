@@ -2,6 +2,7 @@
 # consolidates the information for display.
 
 import logging
+import simplejson as json
 
 class NullHandler(logging.Handler):
     def emit(self, record):
@@ -13,7 +14,8 @@ import struct
 import socket
 from collections import namedtuple
 from kafka.client import KafkaClient
-from kafka.common import OffsetRequest
+from kafka.common import OffsetRequest, FetchRequest, ConsumerFetchSizeTooSmall
+
 
 class ProcessorError(Exception):
     def __init__(self, msg):
@@ -32,7 +34,8 @@ PartitionState = namedtuple('PartitionState',
         'depth',            # Depth of partition on broker.
         'spout',            # The Spout consuming this partition
         'current',          # Current offset for Spout
-        'delta'             # Difference between latest and current
+        'delta',            # Difference between latest and current
+        'timestamp'         # Current offset datetime
     ])
 PartitionsSummary = namedtuple('PartitionsSummary',
     [
@@ -42,6 +45,13 @@ PartitionsSummary = namedtuple('PartitionsSummary',
         'num_brokers',      # Number of Kafka Brokers.
         'partitions'        # Tuple of PartitionStates
     ])
+
+def get_timestamp(k, p, current):
+    buffer_size = 1024
+    responses = k.send_fetch_request([FetchRequest(p['topic'], p['partition'], current, buffer_size)])
+    for resp in responses:
+        for message in resp.messages:
+            return json.loads(message.message.value)['s']
 
 def process(spouts):
     '''
@@ -69,6 +79,8 @@ def process(spouts):
             total_depth = total_depth + (latest - earliest)
             total_delta = total_delta + (latest - current)
 
+            timestamp = get_timestamp(k, p, current)
+
             results.append(PartitionState._make([
                 p['broker']['host'],
                 p['topic'],
@@ -78,7 +90,8 @@ def process(spouts):
                 latest - earliest,
                 s.id,
                 current,
-                latest - current]))
+                latest - current,
+                timestamp]))
     return PartitionsSummary(total_depth=total_depth,
                              total_delta=total_delta,
                              num_partitions=len(results),

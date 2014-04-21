@@ -5,6 +5,7 @@ import sys
 from prettytable import PrettyTable
 import requests
 import simplejson as json
+import datetime
 
 from zkclient import ZkClient, ZkError
 from processor import process, ProcessorError
@@ -26,12 +27,12 @@ def display(summary, friendly=False):
         fmt = null_fmt
 
     table = PrettyTable(['Broker', 'Topic', 'Partition', 'Earliest', 'Latest',
-                        'Depth', 'Spout', 'Current', 'Delta'])
+                        'Depth', 'Spout', 'Current', 'Delta', 'Timestamp'])
     table.align['broker'] = 'l'
 
     for p in summary.partitions:
         table.add_row([p.broker, p.topic, p.partition, p.earliest, p.latest,
-                      fmt(p.depth), p.spout, p.current, fmt(p.delta)])
+                      fmt(p.depth), p.spout, p.current, fmt(p.delta), datetime.datetime.fromtimestamp(p.timestamp/1000.0)])
     print table.get_string(sortby='Broker')
     print
     print 'Number of brokers:       %d' % summary.num_brokers
