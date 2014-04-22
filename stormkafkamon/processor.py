@@ -3,6 +3,8 @@
 
 import logging
 import simplejson as json
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 class NullHandler(logging.Handler):
     def emit(self, record):
@@ -10,11 +12,10 @@ class NullHandler(logging.Handler):
 
 logger = logging.getLogger('kafka.codec').addHandler(NullHandler())
 
-import struct
 import socket
 from collections import namedtuple
 from kafka.client import KafkaClient
-from kafka.common import OffsetRequest, FetchRequest, ConsumerFetchSizeTooSmall
+from kafka.common import OffsetRequest, FetchRequest
 
 
 class ProcessorError(Exception):
@@ -35,12 +36,14 @@ PartitionState = namedtuple('PartitionState',
         'spout',            # The Spout consuming this partition
         'current',          # Current offset for Spout
         'delta',            # Difference between latest and current
-        'timestamp'         # Current offset datetime
+        'timestamp',        # Current offset datetime
+        'lag',              # Time lag between Storm and Kafka latest
     ])
 PartitionsSummary = namedtuple('PartitionsSummary',
     [
         'total_depth',      # Total queue depth.
         'total_delta',      # Total delta across all spout tasks.
+        'total_lag',        # Total lag between Storm and Kafka
         'num_partitions',   # Number of partitions.
         'num_brokers',      # Number of Kafka Brokers.
         'partitions'        # Tuple of PartitionStates
@@ -53,6 +56,18 @@ def get_timestamp(k, p, current):
         for message in resp.messages:
             return json.loads(message.message.value)['s']
 
+def now():
+    return int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+def max_relativedate(a, b):
+    attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
+    for attr in attrs:
+        if getattr(a, attr) > getattr(b, attr):
+            return a
+        if getattr(b, attr) > getattr(a, attr):
+            return b
+    return a
+
 def process(spouts):
     '''
     Returns a named tuple of type PartitionsSummary.
@@ -60,6 +75,7 @@ def process(spouts):
     results = []
     total_depth = 0
     total_delta = 0
+    total_lag = relativedelta()
     brokers = []
     for s in spouts:
         for p in s.partitions:
@@ -79,7 +95,9 @@ def process(spouts):
             total_depth = total_depth + (latest - earliest)
             total_delta = total_delta + (latest - current)
 
-            timestamp = get_timestamp(k, p, current)
+            timestamp = get_timestamp(k, p, current) or 0
+            lag = relativedelta(datetime.now(), datetime.fromtimestamp(timestamp/1000.0))
+            total_lag = max_relativedate(total_lag, lag)
 
             results.append(PartitionState._make([
                 p['broker']['host'],
@@ -91,9 +109,11 @@ def process(spouts):
                 s.id,
                 current,
                 latest - current,
-                timestamp]))
+                timestamp,
+                lag]))
     return PartitionsSummary(total_depth=total_depth,
                              total_delta=total_delta,
+                             total_lag=total_lag,
                              num_partitions=len(results),
                              num_brokers=len(set(brokers)),
                              partitions=tuple(results))

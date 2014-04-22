@@ -20,6 +20,11 @@ def sizeof_fmt(num):
 def null_fmt(num):
     return num
 
+def time_fmt(d):
+    attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
+    human_readable = lambda delta: ['%d %s' % (getattr(delta, attr), getattr(delta, attr) > 1 and attr or attr[:-1]) for attr in attrs if getattr(delta, attr)]
+    return human_readable(d)
+
 def display(summary, friendly=False):
     if friendly:
         fmt = sizeof_fmt
@@ -27,18 +32,20 @@ def display(summary, friendly=False):
         fmt = null_fmt
 
     table = PrettyTable(['Broker', 'Topic', 'Partition', 'Earliest', 'Latest',
-                        'Depth', 'Spout', 'Current', 'Delta', 'Timestamp'])
+                        'Depth', 'Spout', 'Current', 'Delta', 'Timestamp', 'Lag'])
     table.align['broker'] = 'l'
 
     for p in summary.partitions:
         table.add_row([p.broker, p.topic, p.partition, p.earliest, p.latest,
-                      fmt(p.depth), p.spout, p.current, fmt(p.delta), datetime.datetime.fromtimestamp(p.timestamp/1000.0)])
+                      fmt(p.depth), p.spout, p.current, fmt(p.delta),
+                      datetime.datetime.fromtimestamp(p.timestamp/1000.0), time_fmt(p.lag)[0]])
     print table.get_string(sortby='Broker')
     print
     print 'Number of brokers:       %d' % summary.num_brokers
     print 'Number of partitions:    %d' % summary.num_partitions
     print 'Total broker depth:      %s' % fmt(summary.total_depth)
     print 'Total delta:             %s' % fmt(summary.total_delta)
+    print 'Total lag:               %s' % time_fmt(summary.total_lag)[0]
 
 def post_json(endpoint, zk_data):
     fields = ("broker", "topic", "partition", "earliest", "latest", "depth",
