@@ -77,8 +77,16 @@ def process(spouts):
     total_delta = 0
     total_lag = relativedelta()
     brokers = []
+    seen_hosts, seen_topics, seen_partitions = set(), set(), set()
     for s in spouts:
         for p in s.partitions:
+            if p['broker']['host'] in seen_hosts and p['topic'] in seen_topics and p['partition'] in seen_partitions:
+                continue
+            else:
+                seen_hosts.add(p['broker']['host'])
+                seen_topics.add(p['topic'])
+                seen_partitions.add(p['partition'])
+
             try:
                 k = KafkaClient('%s:%s' % (p['broker']['host'], p['broker']['port']))
             except socket.gaierror, e:
