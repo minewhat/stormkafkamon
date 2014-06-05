@@ -23,22 +23,25 @@ def null_fmt(num):
 def time_fmt(d):
     attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
     human_readable = lambda delta: ['%d %s' % (getattr(delta, attr), getattr(delta, attr) > 1 and attr or attr[:-1]) for attr in attrs if getattr(delta, attr)]
-    return human_readable(d)
+    return human_readable(d) or ['0 seconds']
 
-def display(summary, friendly=False):
+def display(summary, friendly=False, include_lag=False):
     if friendly:
         fmt = sizeof_fmt
     else:
         fmt = null_fmt
 
-    table = PrettyTable(['Broker', 'Topic', 'Partition', 'Earliest', 'Latest',
-                        'Depth', 'Spout', 'Current', 'Delta', 'Timestamp', 'Lag'])
+    headers = ['Broker', 'Topic', 'Partition', 'Earliest', 'Latest', 'Depth', 'Spout', 'Current', 'Delta']
+    if include_lag:
+        headers.extend(['Timestamp', 'Lag'])
+    table = PrettyTable(headers)
     table.align['broker'] = 'l'
 
     for p in summary.partitions:
-        table.add_row([p.broker, p.topic, p.partition, p.earliest, p.latest,
-                      fmt(p.depth), p.spout, p.current, fmt(p.delta),
-                      datetime.datetime.fromtimestamp(p.timestamp/1000.0), time_fmt(p.lag)[0]])
+        fields = [p.broker, p.topic, p.partition, p.earliest, p.latest, fmt(p.depth), p.spout, p.current, fmt(p.delta)]
+        if include_lag:
+            fields.extend([datetime.datetime.fromtimestamp(p.timestamp/1000.0), time_fmt(p.lag)[0]])
+        table.add_row(fields)
     print table.get_string(sortby='Broker')
     print
     print 'Number of brokers:       %d' % summary.num_brokers
@@ -82,9 +85,13 @@ def read_args():
     parser.add_argument('--spoutroot', type=str, required=True,
         help='Root path for Kafka Spout data in Zookeeper')
     parser.add_argument('--friendly', action='store_const', const=True,
-                    help='Show friendlier data')
+        help='Show friendlier data')
     parser.add_argument('--postjson', type=str,
-                    help='endpoint to post json data to')
+        help='endpoint to post json data to')
+    parser.add_argument('--field_name', type=str,
+        help='The name of the field containing the timestamp in the Kafka JSON message')
+    parser.add_argument('--in_array', type=bool, default=False,
+        help='Indicate that the Kafka messages are wrapped in an array')
     return parser.parse_args()
 
 def main():
@@ -93,7 +100,8 @@ def main():
     zc = ZkClient(options.zserver, options.zport)
 
     try:
-        zk_data = process(zc.spouts(options.spoutroot, options.topology))
+        zk_data = process(zc.spouts(options.spoutroot, options.topology),
+                          field_name=options.field_name, in_array=options.in_array)
     except ZkError, e:
         print 'Failed to access Zookeeper: %s' % str(e)
         return 1
@@ -104,7 +112,7 @@ def main():
         if options.postjson:
             post_json(options.postjson, zk_data)
         else:
-            display(zk_data, true_or_false_option(options.friendly))
+            display(zk_data, true_or_false_option(options.friendly), options.field_name != None)
 
     return 0
 

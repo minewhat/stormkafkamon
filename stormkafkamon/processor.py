@@ -49,13 +49,6 @@ PartitionsSummary = namedtuple('PartitionsSummary',
         'partitions'        # Tuple of PartitionStates
     ])
 
-def get_timestamp(k, p, current):
-    buffer_size = 1024
-    responses = k.send_fetch_request([FetchRequest(p['topic'].encode('utf-8'), p['partition'], current, buffer_size)])
-    for resp in responses:
-        for message in resp.messages:
-            return json.loads(message.message.value)['s']
-
 def now():
     return int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
 
@@ -68,10 +61,20 @@ def max_relativedate(a, b):
             return b
     return a
 
-def process(spouts):
+def process(spouts, in_array, field_name, array_index=0):
     '''
     Returns a named tuple of type PartitionsSummary.
     '''
+    def get_timestamp(k, p, current):
+        buffer_size = 1024
+        responses = k.send_fetch_request([FetchRequest(p['topic'].encode('utf-8'), p['partition'], current, buffer_size)])
+        for resp in responses:
+            for message in resp.messages:
+                if in_array:
+                    return json.loads(message.message.value)[array_index][field_name]
+                else:
+                    return json.loads(message.message.value)[field_name]
+
     results = []
     total_depth = 0
     total_delta = 0
@@ -105,12 +108,12 @@ def process(spouts):
             total_depth = total_depth + depth
             total_delta = total_delta + delta
 
-            if delta == 0:
-                timestamp = now()
-                lag = relativedelta(0, 0)
-            else:
+            if delta != 0 and field_name:
                 timestamp = get_timestamp(k, p, current)
                 lag = relativedelta(datetime.now(), datetime.fromtimestamp(timestamp/1000.0))
+            else:
+                timestamp = now()
+                lag = relativedelta(0, 0)
             total_lag = max_relativedate(total_lag, lag)
 
             results.append(PartitionState._make([
