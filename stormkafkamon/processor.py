@@ -100,11 +100,17 @@ def process(spouts):
             current = p['offset']
 
             brokers.append(p['broker']['host'])
-            total_depth = total_depth + (latest - earliest)
-            total_delta = total_delta + (latest - current)
+            depth = (latest - earliest)
+            delta = (latest - current)
+            total_depth = total_depth + depth
+            total_delta = total_delta + delta
 
-            timestamp = get_timestamp(k, p, current) or 0
-            lag = relativedelta(datetime.now(), datetime.fromtimestamp(timestamp/1000.0))
+            if delta == 0:
+                timestamp = now()
+                lag = relativedelta(0, 0)
+            else:
+                timestamp = get_timestamp(k, p, current)
+                lag = relativedelta(datetime.now(), datetime.fromtimestamp(timestamp/1000.0))
             total_lag = max_relativedate(total_lag, lag)
 
             results.append(PartitionState._make([
@@ -113,10 +119,10 @@ def process(spouts):
                 p['partition'],
                 earliest,
                 latest,
-                latest - earliest,
+                depth,
                 s.id,
                 current,
-                latest - current,
+                delta,
                 timestamp,
                 lag]))
     return PartitionsSummary(total_depth=total_depth,
