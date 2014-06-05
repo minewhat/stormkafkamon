@@ -51,7 +51,7 @@ PartitionsSummary = namedtuple('PartitionsSummary',
 
 def get_timestamp(k, p, current):
     buffer_size = 1024
-    responses = k.send_fetch_request([FetchRequest(p['topic'], p['partition'], current, buffer_size)])
+    responses = k.send_fetch_request([FetchRequest(p['topic'].encode('utf-8'), p['partition'], current, buffer_size)])
     for resp in responses:
         for message in resp.messages:
             return json.loads(message.message.value)['s']
@@ -92,8 +92,8 @@ def process(spouts):
             except socket.gaierror, e:
                 raise ProcessorError('Failed to contact Kafka broker %s (%s)' %
                                      (p['broker']['host'], str(e)))
-            earliest_off = OffsetRequest(p['topic'], p['partition'], -2, 1)
-            latest_off = OffsetRequest(p['topic'], p['partition'], -1, 1)
+            earliest_off = OffsetRequest(p['topic'].encode('utf-8'), p['partition'], -2, 1)
+            latest_off = OffsetRequest(p['topic'].encode('utf-8'), p['partition'], -1, 1)
 
             earliest = k.send_offset_request([earliest_off])[0].offsets[0]
             latest = k.send_offset_request([latest_off])[0].offsets[0]
