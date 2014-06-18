@@ -8,6 +8,7 @@ install_requires = [
     'simplejson',
     'argparse',
     'requests',
+    'python-dateutil',
     'kafka-python'
 ]
 
