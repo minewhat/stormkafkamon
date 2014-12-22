@@ -6,6 +6,9 @@ import sys
 from time import sleep, time
 from collections import deque
 from prettytable import PrettyTable
+import requests
+import simplejson as json
+import datetime
 
 from zkclient import ZkClient, ZkError
 from processor import process, ProcessorError
@@ -19,6 +22,12 @@ def sizeof_fmt(num):
 
 def null_fmt(num):
     return num
+
+def time_fmt(d):
+    attrs = ['years', 'months', 'days', 'hours', 'minutes', 'seconds']
+    human_readable = lambda delta: ['%d %s' % (getattr(delta, attr), getattr(delta, attr) > 1 and attr or attr[:-1]) for attr in attrs if getattr(delta, attr)]
+    return human_readable(d) or ['0 seconds']
+
 
 def display(snap, rates, friendly=False, eventsize=360):
     if friendly:
