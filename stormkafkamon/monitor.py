@@ -63,7 +63,8 @@ def post_json(endpoint, zk_data):
     total['partitions'] = len({p.partition for p in zk_data.partitions})
     total['brokers'] = len({p.broker for p in zk_data.partitions})
     json_data['total'] = total
-    requests.post(endpoint, data=json.dumps(json_data))
+    print json.dumps(json_data)
+    #requests.post(endpoint, data=json.dumps(json_data))
 
 ######################################################################
 
